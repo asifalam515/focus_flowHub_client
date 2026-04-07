@@ -1,10 +1,10 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { useApp } from "@/context/AppContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Target, Loader2 } from "lucide-react";
+import { useApp } from "@/context/AppContext";
+import { Loader2, Target } from "lucide-react";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 export default function AuthPage() {
   const [isLogin, setIsLogin] = useState(true);
@@ -20,7 +20,8 @@ export default function AuthPage() {
     const e: Record<string, string> = {};
     if (!email.includes("@")) e.email = "Invalid email";
     if (password.length < 6) e.password = "Min 6 characters";
-    if (!isLogin && password !== confirmPassword) e.confirmPassword = "Passwords don't match";
+    if (!isLogin && password !== confirmPassword)
+      e.confirmPassword = "Passwords don't match";
     if (!isLogin && !name.trim()) e.name = "Name is required";
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -29,12 +30,19 @@ export default function AuthPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
-    if (isLogin) {
-      await login(email, password);
-    } else {
-      await signup(email, password, name);
+    setErrors((prev) => ({ ...prev, form: "" }));
+    try {
+      if (isLogin) {
+        await login(email, password);
+      } else {
+        await signup(email, password, name);
+      }
+      navigate("/");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Authentication failed";
+      setErrors((prev) => ({ ...prev, form: message }));
     }
-    navigate("/");
   };
 
   return (
@@ -44,7 +52,9 @@ export default function AuthPage() {
           <div className="h-12 w-12 rounded-xl bg-primary flex items-center justify-center">
             <Target className="h-7 w-7 text-primary-foreground" />
           </div>
-          <h1 className="text-3xl font-bold text-foreground tracking-tight">FocusHub</h1>
+          <h1 className="text-3xl font-bold text-foreground tracking-tight">
+            FocusHub
+          </h1>
         </div>
 
         <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
@@ -52,43 +62,93 @@ export default function AuthPage() {
             {isLogin ? "Welcome back" : "Create account"}
           </h2>
           <p className="text-sm text-muted-foreground mb-6">
-            {isLogin ? "Sign in to continue" : "Start your productivity journey"}
+            {isLogin
+              ? "Sign in to continue"
+              : "Start your productivity journey"}
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {!isLogin && (
               <div>
                 <Label htmlFor="name">Name</Label>
-                <Input id="name" value={name} onChange={e => setName(e.target.value)} placeholder="Alex Johnson" />
-                {errors.name && <p className="text-destructive text-xs mt-1">{errors.name}</p>}
+                <Input
+                  id="name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Alex Johnson"
+                />
+                {errors.name && (
+                  <p className="text-destructive text-xs mt-1">{errors.name}</p>
+                )}
               </div>
             )}
             <div>
               <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="alex@example.com" />
-              {errors.email && <p className="text-destructive text-xs mt-1">{errors.email}</p>}
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="alex@example.com"
+              />
+              {errors.email && (
+                <p className="text-destructive text-xs mt-1">{errors.email}</p>
+              )}
             </div>
             <div>
               <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" />
-              {errors.password && <p className="text-destructive text-xs mt-1">{errors.password}</p>}
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+              />
+              {errors.password && (
+                <p className="text-destructive text-xs mt-1">
+                  {errors.password}
+                </p>
+              )}
             </div>
             {!isLogin && (
               <div>
                 <Label htmlFor="confirm">Confirm Password</Label>
-                <Input id="confirm" type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="••••••••" />
-                {errors.confirmPassword && <p className="text-destructive text-xs mt-1">{errors.confirmPassword}</p>}
+                <Input
+                  id="confirm"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="••••••••"
+                />
+                {errors.confirmPassword && (
+                  <p className="text-destructive text-xs mt-1">
+                    {errors.confirmPassword}
+                  </p>
+                )}
               </div>
             )}
             <Button type="submit" className="w-full" disabled={loading.auth}>
-              {loading.auth && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {loading.auth && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
               {isLogin ? "Sign In" : "Create Account"}
             </Button>
+            {errors.form && (
+              <p className="text-destructive text-xs text-center">
+                {errors.form}
+              </p>
+            )}
           </form>
 
           <p className="text-center text-sm text-muted-foreground mt-4">
             {isLogin ? "Don't have an account?" : "Already have an account?"}{" "}
-            <button onClick={() => { setIsLogin(!isLogin); setErrors({}); }} className="text-primary font-medium hover:underline">
+            <button
+              onClick={() => {
+                setIsLogin(!isLogin);
+                setErrors({});
+              }}
+              className="text-primary font-medium hover:underline"
+            >
               {isLogin ? "Sign up" : "Sign in"}
             </button>
           </p>

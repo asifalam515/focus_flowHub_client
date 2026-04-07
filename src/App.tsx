@@ -1,26 +1,40 @@
-import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { AppProvider } from "@/context/AppContext";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import DashboardPage from "./pages/DashboardPage";
-import TasksPage from "./pages/TasksPage";
-import HabitsPage from "./pages/HabitsPage";
-import GoalsPage from "./pages/GoalsPage";
-import BooksPage from "./pages/BooksPage";
-import PomodoroPage from "./pages/PomodoroPage";
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import { Toaster } from "@/components/ui/toaster";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { AppProvider, useApp } from "@/context/AppContext";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import AnalyticsPage from "./pages/AnalyticsPage";
-import ProfilePage from "./pages/ProfilePage";
 import AuthPage from "./pages/AuthPage";
+import BooksPage from "./pages/BooksPage";
+import DashboardPage from "./pages/DashboardPage";
+import GoalsPage from "./pages/GoalsPage";
+import HabitsPage from "./pages/HabitsPage";
 import InboxPage from "./pages/InboxPage";
 import NextActionsPage from "./pages/NextActionsPage";
-import ProjectsPage from "./pages/ProjectsPage";
-import WeeklyReviewPage from "./pages/WeeklyReviewPage";
 import NotFound from "./pages/NotFound";
+import PomodoroPage from "./pages/PomodoroPage";
+import ProfilePage from "./pages/ProfilePage";
+import ProjectsPage from "./pages/ProjectsPage";
+import TasksPage from "./pages/TasksPage";
+import WeeklyReviewPage from "./pages/WeeklyReviewPage";
 
 const queryClient = new QueryClient();
+
+const ProtectedRoutes = () => {
+  const { isAuthenticated } = useApp();
+  return isAuthenticated ? (
+    <DashboardLayout />
+  ) : (
+    <Navigate to="/auth" replace />
+  );
+};
+
+const AuthOnlyRoute = () => {
+  const { isAuthenticated } = useApp();
+  return isAuthenticated ? <Navigate to="/" replace /> : <AuthPage />;
+};
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -30,8 +44,8 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
-            <Route path="/auth" element={<AuthPage />} />
-            <Route element={<DashboardLayout />}>
+            <Route path="/auth" element={<AuthOnlyRoute />} />
+            <Route element={<ProtectedRoutes />}>
               <Route path="/" element={<DashboardPage />} />
               <Route path="/tasks" element={<TasksPage />} />
               <Route path="/habits" element={<HabitsPage />} />
