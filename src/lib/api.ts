@@ -6,12 +6,15 @@ import {
   PomodoroSession,
   Project,
   Task,
-  TaskStatus,
   TaskContext,
+  TaskStatus,
   User,
 } from "@/types";
 
-const BASE_URL = import.meta.env.VITE_BASE_URL || "https://focushubserver.vercel.app/api/v1";
+const BASE_URL =
+  import.meta.env.VITE_BASE_URL ||
+  import.meta.env.VITE_BAS_URL ||
+  "https://focushubserver.vercel.app/api/v1";
 
 const AUTH_TOKEN_KEY = "focushub_auth_token";
 
@@ -52,11 +55,19 @@ interface ApiResponse<T = unknown> {
   };
 }
 
+const unwrapData = <T>(response: ApiResponse<T> | T | null): T | null => {
+  if (response === null) return null;
+  if (typeof response !== "object") return response as T;
+
+  if ("data" in (response as ApiResponse<T>)) {
+    return ((response as ApiResponse<T>).data ?? null) as T | null;
+  }
+
+  return response as T;
+};
+
 // Request helper
-async function request<T>(
-  endpoint: string,
-  options?: RequestInit,
-): Promise<T> {
+async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const token = getToken();
 
   const headers: HeadersInit = {
@@ -73,7 +84,9 @@ async function request<T>(
 
   if (!response.ok) {
     const message =
-      data?.message || data?.error || `Request failed with status ${response.status}`;
+      data?.message ||
+      data?.error ||
+      `Request failed with status ${response.status}`;
     throw new Error(message);
   }
 
@@ -83,17 +96,48 @@ async function request<T>(
 // ============ AUTH ============
 
 export interface AuthResponse {
-  token: string;
+  token: string | null;
   user: User;
 }
 
+const normalizeAuthResponse = (
+  payload: ApiResponse<AuthResponse | User>,
+): AuthResponse => {
+  const data = unwrapData<AuthResponse | User>(payload);
+
+  if (!data || typeof data !== "object") {
+    throw new Error("Invalid auth response from server");
+  }
+
+  if ("user" in data) {
+    const authData = data as AuthResponse;
+    return {
+      token: authData.token ?? null,
+      user: authData.user,
+    };
+  }
+
+  return {
+    token: null,
+    user: data as User,
+  };
+};
+
 export const authApi = {
-  signup: async (email: string, password: string, name: string, avatar?: string): Promise<AuthResponse> => {
-    const response = await request<ApiResponse<AuthResponse>>("/auth/signup", {
-      method: "POST",
-      body: JSON.stringify({ email, password, name, avatar }),
-    });
-    return response.data!;
+  signup: async (
+    email: string,
+    password: string,
+    name: string,
+    avatar?: string,
+  ): Promise<AuthResponse> => {
+    const response = await request<ApiResponse<AuthResponse | User>>(
+      "/auth/signup",
+      {
+        method: "POST",
+        body: JSON.stringify({ email, password, name, avatar }),
+      },
+    );
+    return normalizeAuthResponse(response);
   },
 
   login: async (email: string, password: string): Promise<AuthResponse> => {
@@ -101,7 +145,7 @@ export const authApi = {
       method: "POST",
       body: JSON.stringify({ email, password }),
     });
-    return response.data!;
+    return normalizeAuthResponse(response);
   },
 
   logout: async (): Promise<void> => {
@@ -112,7 +156,9 @@ export const authApi = {
 
   getMe: async (): Promise<User> => {
     const response = await request<ApiResponse<User>>("/auth/me");
-    return response.data!;
+    const user = unwrapData<User>(response);
+    if (!user) throw new Error("User not found in /auth/me response");
+    return user;
   },
 
   updateMe: async (name?: string, avatar?: string): Promise<User> => {
@@ -120,7 +166,9 @@ export const authApi = {
       method: "PATCH",
       body: JSON.stringify({ name, avatar }),
     });
-    return response.data!;
+    const user = unwrapData<User>(response);
+    if (!user) throw new Error("User not found in profile update response");
+    return user;
   },
 };
 
@@ -144,7 +192,7 @@ export interface MoveTaskInput {
 export const tasksApi = {
   getAll: async (): Promise<Task[]> => {
     const response = await request<ApiResponse<Task[]>>("/tasks");
-    return response.data || [];
+    return unwrapData<Task[]>(response) || [];
   },
 
   create: async (input: CreateTaskInput): Promise<Task> => {
@@ -152,15 +200,22 @@ export const tasksApi = {
       method: "POST",
       body: JSON.stringify(input),
     });
-    return response.data!;
+    const task = unwrapData<Task>(response);
+    if (!task) throw new Error("Task not returned from create endpoint");
+    return task;
   },
 
-  update: async (id: string, input: Partial<CreateTaskInput>): Promise<Task> => {
+  update: async (
+    id: string,
+    input: Partial<CreateTaskInput>,
+  ): Promise<Task> => {
     const response = await request<ApiResponse<Task>>(`/tasks/${id}`, {
       method: "PATCH",
       body: JSON.stringify(input),
     });
-    return response.data!;
+    const task = unwrapData<Task>(response);
+    if (!task) throw new Error("Task not returned from update endpoint");
+    return task;
   },
 
   delete: async (id: string): Promise<void> => {
@@ -172,23 +227,32 @@ export const tasksApi = {
   // Inbox specific
   getInbox: async (): Promise<Task[]> => {
     const response = await request<ApiResponse<Task[]>>("/tasks/inbox");
-    return response.data || [];
+    return unwrapData<Task[]>(response) || [];
   },
 
-  createInbox: async (input: Omit<CreateTaskInput, "status">): Promise<Task> => {
+  createInbox: async (
+    input: Omit<CreateTaskInput, "status">,
+  ): Promise<Task> => {
     const response = await request<ApiResponse<Task>>("/tasks/inbox", {
       method: "POST",
       body: JSON.stringify(input),
     });
-    return response.data!;
+    const task = unwrapData<Task>(response);
+    if (!task) throw new Error("Task not returned from inbox create endpoint");
+    return task;
   },
 
   moveInbox: async (id: string, status: TaskStatus): Promise<Task> => {
-    const response = await request<ApiResponse<Task>>(`/tasks/inbox/${id}/move`, {
-      method: "PATCH",
-      body: JSON.stringify({ status }),
-    });
-    return response.data!;
+    const response = await request<ApiResponse<Task>>(
+      `/tasks/inbox/${id}/move`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      },
+    );
+    const task = unwrapData<Task>(response);
+    if (!task) throw new Error("Task not returned from inbox move endpoint");
+    return task;
   },
 };
 
@@ -203,7 +267,7 @@ export interface CreateProjectInput {
 export const projectsApi = {
   getAll: async (): Promise<Project[]> => {
     const response = await request<ApiResponse<Project[]>>("/projects");
-    return response.data || [];
+    return unwrapData<Project[]>(response) || [];
   },
 
   create: async (input: CreateProjectInput): Promise<Project> => {
@@ -211,10 +275,15 @@ export const projectsApi = {
       method: "POST",
       body: JSON.stringify(input),
     });
-    return response.data!;
+    const project = unwrapData<Project>(response);
+    if (!project) throw new Error("Project not returned from create endpoint");
+    return project;
   },
 
-  update: async (id: string, input: Partial<CreateProjectInput>): Promise<Project> => {
+  update: async (
+    id: string,
+    input: Partial<CreateProjectInput>,
+  ): Promise<Project> => {
     const response = await request<ApiResponse<Project>>(`/projects/${id}`, {
       method: "PATCH",
       body: JSON.stringify(input),
@@ -240,7 +309,7 @@ export interface CreateHabitInput {
 export const habitsApi = {
   getAll: async (): Promise<Habit[]> => {
     const response = await request<ApiResponse<Habit[]>>("/habits");
-    return response.data || [];
+    return unwrapData<Habit[]>(response) || [];
   },
 
   create: async (input: CreateHabitInput): Promise<Habit> => {
@@ -248,10 +317,15 @@ export const habitsApi = {
       method: "POST",
       body: JSON.stringify(input),
     });
-    return response.data!;
+    const habit = unwrapData<Habit>(response);
+    if (!habit) throw new Error("Habit not returned from create endpoint");
+    return habit;
   },
 
-  update: async (id: string, input: Partial<CreateHabitInput>): Promise<Habit> => {
+  update: async (
+    id: string,
+    input: Partial<CreateHabitInput>,
+  ): Promise<Habit> => {
     const response = await request<ApiResponse<Habit>>(`/habits/${id}`, {
       method: "PATCH",
       body: JSON.stringify(input),
@@ -278,7 +352,7 @@ export interface CreateGoalInput {
 export const goalsApi = {
   getAll: async (): Promise<Goal[]> => {
     const response = await request<ApiResponse<Goal[]>>("/goals");
-    return response.data || [];
+    return unwrapData<Goal[]>(response) || [];
   },
 
   create: async (input: CreateGoalInput): Promise<Goal> => {
@@ -286,15 +360,22 @@ export const goalsApi = {
       method: "POST",
       body: JSON.stringify(input),
     });
-    return response.data!;
+    const goal = unwrapData<Goal>(response);
+    if (!goal) throw new Error("Goal not returned from create endpoint");
+    return goal;
   },
 
-  update: async (id: string, input: Partial<CreateGoalInput>): Promise<Goal> => {
+  update: async (
+    id: string,
+    input: Partial<CreateGoalInput>,
+  ): Promise<Goal> => {
     const response = await request<ApiResponse<Goal>>(`/goals/${id}`, {
       method: "PUT",
       body: JSON.stringify(input),
     });
-    return response.data!;
+    const goal = unwrapData<Goal>(response);
+    if (!goal) throw new Error("Goal not returned from update endpoint");
+    return goal;
   },
 
   delete: async (id: string): Promise<void> => {
@@ -318,7 +399,7 @@ export interface CreateBookInput {
 export const booksApi = {
   getAll: async (): Promise<Book[]> => {
     const response = await request<ApiResponse<Book[]>>("/books");
-    return response.data || [];
+    return unwrapData<Book[]>(response) || [];
   },
 
   create: async (input: CreateBookInput): Promise<Book> => {
@@ -326,10 +407,15 @@ export const booksApi = {
       method: "POST",
       body: JSON.stringify(input),
     });
-    return response.data!;
+    const book = unwrapData<Book>(response);
+    if (!book) throw new Error("Book not returned from create endpoint");
+    return book;
   },
 
-  update: async (id: string, input: Partial<CreateBookInput>): Promise<Book> => {
+  update: async (
+    id: string,
+    input: Partial<CreateBookInput>,
+  ): Promise<Book> => {
     const response = await request<ApiResponse<Book>>(`/books/${id}`, {
       method: "PUT",
       body: JSON.stringify(input),
@@ -355,7 +441,7 @@ export interface CreatePomodoroInput {
 export const pomodoroApi = {
   getAll: async (): Promise<PomodoroSession[]> => {
     const response = await request<ApiResponse<PomodoroSession[]>>("/pomodoro");
-    return response.data || [];
+    return unwrapData<PomodoroSession[]>(response) || [];
   },
 
   create: async (input: CreatePomodoroInput): Promise<PomodoroSession> => {
@@ -363,14 +449,24 @@ export const pomodoroApi = {
       method: "POST",
       body: JSON.stringify(input),
     });
-    return response.data!;
+    const session = unwrapData<PomodoroSession>(response);
+    if (!session) {
+      throw new Error("Pomodoro session not returned from create endpoint");
+    }
+    return session;
   },
 
-  update: async (id: string, input: Partial<CreatePomodoroInput>): Promise<PomodoroSession> => {
-    const response = await request<ApiResponse<PomodoroSession>>(`/pomodoro/${id}`, {
-      method: "PUT",
-      body: JSON.stringify(input),
-    });
+  update: async (
+    id: string,
+    input: Partial<CreatePomodoroInput>,
+  ): Promise<PomodoroSession> => {
+    const response = await request<ApiResponse<PomodoroSession>>(
+      `/pomodoro/${id}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(input),
+      },
+    );
     return response.data!;
   },
 
@@ -385,8 +481,9 @@ export const pomodoroApi = {
 
 export const notificationsApi = {
   getAll: async (): Promise<Notification[]> => {
-    const response = await request<ApiResponse<Notification[]>>("/notifications");
-    return response.data || [];
+    const response =
+      await request<ApiResponse<Notification[]>>("/notifications");
+    return unwrapData<Notification[]>(response) || [];
   },
 
   markRead: async (id: string): Promise<void> => {

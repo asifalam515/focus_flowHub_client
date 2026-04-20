@@ -8,7 +8,12 @@ export interface User {
 }
 
 export type TaskStatus = "inbox" | "next_action" | "completed";
-export type TaskContext = "work" | "personal" | "learning" | "fitness";
+export type TaskContext =
+  | "work"
+  | "personal"
+  | "learning"
+  | "fitness"
+  | "other";
 
 export interface Task {
   id: string;
@@ -16,7 +21,7 @@ export interface Task {
   description: string;
   dueDate: string;
   startTime?: string; // "HH:mm" e.g. "09:00"
-  endTime?: string;   // "HH:mm" e.g. "10:30"
+  endTime?: string; // "HH:mm" e.g. "10:30"
   priority: "low" | "medium" | "high";
   completed: boolean;
   status: TaskStatus;

@@ -1,12 +1,13 @@
-import { dummyNotifications } from "@/data/dummy";
 import { toast } from "@/hooks/use-toast";
 import {
   api,
   CreateBookInput,
   CreateGoalInput,
   CreateHabitInput,
+  CreatePomodoroInput,
   CreateProjectInput,
   CreateTaskInput,
+  getToken,
   removeToken,
   setToken,
 } from "@/lib/api";
@@ -104,8 +105,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [books, setBooks] = useState<Book[]>([]);
   const [sessions, setSessions] = useState<PomodoroSession[]>([]);
-  const [notifications, setNotifications] =
-    useState<Notification[]>(dummyNotifications);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState<Record<string, boolean>>({});
 
   const setL = (key: string, val: boolean) =>
@@ -115,7 +115,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setL("auth", true);
     try {
       const res = await api.auth.login(email, password);
-      setToken(res.token);
+      if (res.token) setToken(res.token);
       setUser(res.user);
       setIsAuthenticated(true);
       toast({
@@ -139,9 +139,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     async (email: string, password: string, name: string, avatar?: string) => {
       setL("auth", true);
       try {
-        const res = await api.auth.signup(email, password, name, avatar);
-        setToken(res.token);
-        setUser(res.user);
+        const signupRes = await api.auth.signup(email, password, name, avatar);
+
+        if (signupRes.token) {
+          setToken(signupRes.token);
+          setUser(signupRes.user);
+        } else {
+          // Backend signup may return only the created user; perform login to get JWT.
+          const loginRes = await api.auth.login(email, password);
+          if (!loginRes.token) {
+            throw new Error(
+              "Signup succeeded but login token was not returned",
+            );
+          }
+          setToken(loginRes.token);
+          setUser(loginRes.user);
+        }
+
         setIsAuthenticated(true);
         toast({
           title: "Account created!",
@@ -427,37 +441,74 @@ export function AppProvider({ children }: { children: ReactNode }) {
     toast({ title: "Book deleted" });
   }, []);
 
+  const fetchNotifications = useCallback(async () => {
+    setL("notifications", true);
+    try {
+      const items = await api.notifications.getAll();
+      setNotifications(items);
+    } finally {
+      setL("notifications", false);
+    }
+  }, []);
+
   // Pomodoro
   const fetchSessions = useCallback(async () => {
     setL("sessions", true);
     try {
-      setSessions(await api.getSessions());
+      setSessions(await api.pomodoro.getAll());
     } finally {
       setL("sessions", false);
     }
   }, []);
   const addSession = useCallback(
-    async (session: Omit<PomodoroSession, "id">) => {
-      const s = await api.createSession(session);
+    async (session: Omit<PomodoroSession, "id" | "userId" | "createdAt">) => {
+      const s = await api.pomodoro.create(session as CreatePomodoroInput);
       setSessions((p) => [s, ...p]);
     },
     [],
   );
   const deleteSession = useCallback(async (id: string) => {
-    await api.deleteSession(id);
+    await api.pomodoro.delete(id);
     setSessions((p) => p.filter((x) => x.id !== id));
   }, []);
 
   // Profile
-  const updateProfile = useCallback(async (data: Partial<User>) => {
-    const u = await api.updateProfile(data);
+  const updateProfile = useCallback(async (name?: string, avatar?: string) => {
+    const u = await api.auth.updateMe(name, avatar);
     setUser(u);
     toast({ title: "Profile updated" });
   }, []);
-  const markNotificationRead = useCallback((id: string) => {
+  const markNotificationRead = useCallback(async (id: string) => {
     setNotifications((p) =>
       p.map((n) => (n.id === id ? { ...n, read: true } : n)),
     );
+    try {
+      await api.notifications.markRead(id);
+    } catch {
+      // Keep optimistic UI state because backend read route has known inconsistencies.
+    }
+  }, []);
+
+  useEffect(() => {
+    const bootstrapAuth = async () => {
+      const token = getToken();
+      if (!token) return;
+
+      setL("auth", true);
+      try {
+        const me = await api.auth.getMe();
+        setUser(me);
+        setIsAuthenticated(true);
+      } catch {
+        removeToken();
+        setUser(null);
+        setIsAuthenticated(false);
+      } finally {
+        setL("auth", false);
+      }
+    };
+
+    bootstrapAuth();
   }, []);
 
   useEffect(() => {
@@ -468,8 +519,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
       fetchGoals();
       fetchBooks();
       fetchSessions();
+      fetchNotifications();
     }
-  }, [isAuthenticated]);
+  }, [
+    isAuthenticated,
+    fetchBooks,
+    fetchGoals,
+    fetchHabits,
+    fetchNotifications,
+    fetchProjects,
+    fetchSessions,
+    fetchTasks,
+  ]);
 
   return (
     <AppContext.Provider
