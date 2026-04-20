@@ -1,14 +1,14 @@
+import { dummyNotifications } from "@/data/dummy";
 import { toast } from "@/hooks/use-toast";
 import {
   api,
-  setToken,
-  removeToken,
-  CreateTaskInput,
-  CreateProjectInput,
-  CreateHabitInput,
-  CreateGoalInput,
   CreateBookInput,
-  CreatePomodoroInput,
+  CreateGoalInput,
+  CreateHabitInput,
+  CreateProjectInput,
+  CreateTaskInput,
+  removeToken,
+  setToken,
 } from "@/lib/api";
 import {
   Book,
@@ -56,13 +56,18 @@ interface AppState {
   captureToInbox: (title: string, context?: TCtx) => Promise<void>;
   // Projects
   fetchProjects: () => Promise<void>;
-  addProject: (p: Omit<Project, "id" | "createdAt" | "userId">) => Promise<void>;
+  addProject: (
+    p: Omit<Project, "id" | "createdAt" | "userId">,
+  ) => Promise<void>;
   updateProject: (id: string, data: Partial<Project>) => Promise<void>;
   deleteProject: (id: string) => Promise<void>;
   // Habits
   fetchHabits: () => Promise<void>;
   addHabit: (
-    habit: Omit<Habit, "id" | "createdAt" | "streak" | "completedToday" | "userId">,
+    habit: Omit<
+      Habit,
+      "id" | "createdAt" | "streak" | "completedToday" | "userId"
+    >,
   ) => Promise<void>;
   updateHabit: (id: string, data: Partial<Habit>) => Promise<void>;
   deleteHabit: (id: string) => Promise<void>;
@@ -79,7 +84,9 @@ interface AppState {
   deleteBook: (id: string) => Promise<void>;
   // Pomodoro
   fetchSessions: () => Promise<void>;
-  addSession: (session: Omit<PomodoroSession, "id" | "userId" | "createdAt">) => Promise<void>;
+  addSession: (
+    session: Omit<PomodoroSession, "id" | "userId" | "createdAt">,
+  ) => Promise<void>;
   deleteSession: (id: string) => Promise<void>;
   // Profile
   updateProfile: (name?: string, avatar?: string) => Promise<void>;
@@ -179,11 +186,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const addTask = useCallback(async (task: Omit<Task, "id" | "createdAt" | "userId">) => {
-    const t = await api.tasks.create(task as CreateTaskInput);
-    setTasks((p) => [t, ...p]);
-    toast({ title: "Task added" });
-  }, []);
+  const addTask = useCallback(
+    async (task: Omit<Task, "id" | "createdAt" | "userId">) => {
+      const t = await api.tasks.create(task as CreateTaskInput);
+      setTasks((p) => [t, ...p]);
+      toast({ title: "Task added" });
+    },
+    [],
+  );
 
   const updateTask = useCallback(async (id: string, data: Partial<Task>) => {
     const t = await api.tasks.update(id, data as Partial<CreateTaskInput>);
@@ -197,22 +207,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
     toast({ title: "Task deleted" });
   }, []);
 
-  const toggleTask = useCallback(async (id: string) => {
-    const task = tasks.find((t) => t.id === id);
-    if (!task) return;
-    const newCompleted = !task.completed;
-    await api.tasks.update(id, {
-      completed: newCompleted,
-      status: newCompleted ? "completed" : "next_action",
-    });
-    setTasks((p) =>
-      p.map((x) =>
-        x.id === id
-          ? { ...x, completed: newCompleted, status: newCompleted ? "completed" : "next_action" }
-          : x,
-      ),
-    );
-  }, [tasks]);
+  const toggleTask = useCallback(
+    async (id: string) => {
+      const task = tasks.find((t) => t.id === id);
+      if (!task) return;
+      const newCompleted = !task.completed;
+      await api.tasks.update(id, {
+        completed: newCompleted,
+        status: newCompleted ? "completed" : "next_action",
+      });
+      setTasks((p) =>
+        p.map((x) =>
+          x.id === id
+            ? {
+                ...x,
+                completed: newCompleted,
+                status: newCompleted ? "completed" : "next_action",
+              }
+            : x,
+        ),
+      );
+    },
+    [tasks],
+  );
 
   const moveTaskStatus = useCallback(async (id: string, status: TaskStatus) => {
     await api.tasks.moveInbox(id, status);
@@ -233,7 +250,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const captureToInbox = useCallback(
     async (title: string, context: TCtx = "personal") => {
-      const t = await api.tasks.createInbox({ title, description: "", context });
+      const t = await api.tasks.createInbox({
+        title,
+        description: "",
+        context,
+      });
       setTasks((p) => [t, ...p]);
       toast({ title: "Captured to Inbox" });
     },
@@ -293,7 +314,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addHabit = useCallback(
     async (
-      habit: Omit<Habit, "id" | "createdAt" | "streak" | "completedToday" | "userId">,
+      habit: Omit<
+        Habit,
+        "id" | "createdAt" | "streak" | "completedToday" | "userId"
+      >,
     ) => {
       const h = await api.habits.create(habit as CreateHabitInput);
       setHabits((p) => [h, ...p]);
@@ -314,23 +338,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
     toast({ title: "Habit deleted" });
   }, []);
 
-  const toggleHabitToday = useCallback(async (id: string) => {
-    const habit = habits.find((h) => h.id === id);
-    if (!habit) return;
-    const newCompleted = !habit.completedToday;
-    // Backend doesn't have toggle endpoint, so we update directly
-    await api.habits.update(id, {
-      completedToday: newCompleted,
-      streak: newCompleted ? habit.streak + 1 : Math.max(0, habit.streak - 1),
-    });
-    setHabits((p) =>
-      p.map((x) =>
-        x.id === id
-          ? { ...x, completedToday: newCompleted, streak: newCompleted ? x.streak + 1 : Math.max(0, x.streak - 1) }
-          : x,
-      ),
-    );
-  }, [habits]);
+  const toggleHabitToday = useCallback(
+    async (id: string) => {
+      const habit = habits.find((h) => h.id === id);
+      if (!habit) return;
+      const newCompleted = !habit.completedToday;
+      // Backend doesn't have toggle endpoint, so we update directly
+      await api.habits.update(id, {
+        completedToday: newCompleted,
+        streak: newCompleted ? habit.streak + 1 : Math.max(0, habit.streak - 1),
+      });
+      setHabits((p) =>
+        p.map((x) =>
+          x.id === id
+            ? {
+                ...x,
+                completedToday: newCompleted,
+                streak: newCompleted ? x.streak + 1 : Math.max(0, x.streak - 1),
+              }
+            : x,
+        ),
+      );
+    },
+    [habits],
+  );
 
   // Goals
   const fetchGoals = useCallback(async () => {
@@ -343,11 +374,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const addGoal = useCallback(async (goal: Omit<Goal, "id" | "createdAt" | "userId">) => {
-    const g = await api.goals.create(goal as CreateGoalInput);
-    setGoals((p) => [g, ...p]);
-    toast({ title: "Goal added" });
-  }, []);
+  const addGoal = useCallback(
+    async (goal: Omit<Goal, "id" | "createdAt" | "userId">) => {
+      const g = await api.goals.create(goal as CreateGoalInput);
+      setGoals((p) => [g, ...p]);
+      toast({ title: "Goal added" });
+    },
+    [],
+  );
 
   const updateGoal = useCallback(async (id: string, data: Partial<Goal>) => {
     await api.goals.update(id, data as Partial<CreateGoalInput>);
@@ -372,11 +406,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const addBook = useCallback(async (book: Omit<Book, "id" | "createdAt" | "userId">) => {
-    const b = await api.books.create(book as CreateBookInput);
-    setBooks((p) => [b, ...p]);
-    toast({ title: "Book added" });
-  }, []);
+  const addBook = useCallback(
+    async (book: Omit<Book, "id" | "createdAt" | "userId">) => {
+      const b = await api.books.create(book as CreateBookInput);
+      setBooks((p) => [b, ...p]);
+      toast({ title: "Book added" });
+    },
+    [],
+  );
 
   const updateBook = useCallback(async (id: string, data: Partial<Book>) => {
     await api.books.update(id, data as Partial<CreateBookInput>);
